@@ -3,7 +3,6 @@ package com.bluesgao.edm.service.impl;
 import com.alibaba.fastjson.JSON;
 import com.bluesgao.edm.common.Result;
 import com.bluesgao.edm.condition.DataMigrateCondition;
-import com.bluesgao.edm.condition.DateRangeDto;
 import com.bluesgao.edm.condition.SplitCondition;
 import com.bluesgao.edm.condition.SplitDateType;
 import com.bluesgao.edm.service.CacheOpsService;

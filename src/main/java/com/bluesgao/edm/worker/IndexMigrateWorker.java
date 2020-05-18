@@ -4,8 +4,6 @@ import com.alibaba.fastjson.JSON;
 import com.bluesgao.edm.common.Result;
 import com.bluesgao.edm.common.ResultCodeEnum;
 import com.bluesgao.edm.condition.DataMigrateCondition;
-import com.bluesgao.edm.condition.DateRangeDto;
-import com.bluesgao.edm.condition.EsDataSyncConfigDto;
 import com.bluesgao.edm.condition.SplitDateType;
 import com.bluesgao.edm.service.CacheOpsService;
 import com.bluesgao.edm.service.EsOpsService;
