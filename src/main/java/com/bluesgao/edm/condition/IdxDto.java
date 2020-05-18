@@ -1,4 +1,4 @@
-package com.bluesgao.edm.conf;
+package com.bluesgao.edm.condition;
 
 import lombok.Getter;
 import lombok.Setter;

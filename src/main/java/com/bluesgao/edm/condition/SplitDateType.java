@@ -1,4 +1,4 @@
-package com.bluesgao.edm.conf;
+package com.bluesgao.edm.condition;
 
 public enum SplitDateType {
     BY_DATE("BY_DATE", "按日"),

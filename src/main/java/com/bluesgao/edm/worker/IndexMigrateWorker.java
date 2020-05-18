@@ -3,8 +3,10 @@ package com.bluesgao.edm.worker;
 import com.alibaba.fastjson.JSON;
 import com.bluesgao.edm.common.Result;
 import com.bluesgao.edm.common.ResultCodeEnum;
-import com.bluesgao.edm.conf.EsDataSyncConfigDto;
-import com.bluesgao.edm.conf.SplitDateType;
+import com.bluesgao.edm.condition.DataMigrateCondition;
+import com.bluesgao.edm.condition.DateRangeDto;
+import com.bluesgao.edm.condition.EsDataSyncConfigDto;
+import com.bluesgao.edm.condition.SplitDateType;
 import com.bluesgao.edm.service.CacheOpsService;
 import com.bluesgao.edm.service.EsOpsService;
 import com.bluesgao.edm.util.DateUtils;
@@ -25,42 +27,41 @@ import static org.elasticsearch.index.query.QueryBuilders.boolQuery;
 import static org.elasticsearch.index.query.QueryBuilders.rangeQuery;
 
 @Slf4j
-public class Es2EsWorker implements Callable<Result<Long>> {
+public class IndexMigrateWorker implements Callable<Result<Long>> {
 
     private EsOpsService esOpsService;
 
     private CacheOpsService cacheOpsService;
+    private DataMigrateCondition condition;
 
-    private EsDataSyncConfigDto dataSyncConfigDto;
-
-    public Es2EsWorker(EsOpsService esOpsService, CacheOpsService cacheOpsService, EsDataSyncConfigDto dataSyncConfigDto) {
+    public IndexMigrateWorker(EsOpsService esOpsService, CacheOpsService cacheOpsService, DataMigrateCondition condition) {
         this.esOpsService = esOpsService;
         this.cacheOpsService = cacheOpsService;
-        this.dataSyncConfigDto = dataSyncConfigDto;
+        this.condition = condition;
     }
 
     @Override
     public Result<Long> call() {
         Result<Long> syncResult = null;
         try {
-            log.info("call doDataSync start dataSyncConfigDto:{}", JSON.toJSONString(dataSyncConfigDto));
-            syncResult = doDataSync(dataSyncConfigDto);
-            log.info("call doDataSync end dataSyncConfigDto:{},syncResult:{}", JSON.toJSONString(dataSyncConfigDto), JSON.toJSONString(syncResult));
+            log.info("call doDataSync start condition:{}", JSON.toJSONString(condition));
+            syncResult = doDataSync(condition);
+            log.info("call doDataSync end condition:{},syncResult:{}", JSON.toJSONString(condition), JSON.toJSONString(syncResult));
             if (syncResult != null && syncResult.getData() != null && syncResult.getData() > 0) {
                 //记录这天已经同步完成
 
                 String redisKey = null;
                 String field = null;
-                Date date = DateUtils.dateParse(dataSyncConfigDto.getDateRangeDto().getEnd(), DateUtils.DATE_TIME_PATTERN);
+                Date date = DateUtils.dateParse(condition.getSplitCondition().getEnd(), DateUtils.DATE_TIME_PATTERN);
                 //按日期分割
-                if (dataSyncConfigDto.getDateRangeDto().getSplitType().getCode().equals(SplitDateType.BY_DATE.getCode())) {
+                if (condition.getSplitCondition().getSplitType().getCode().equals(SplitDateType.BY_DATE.getCode())) {
                     //key cf-sync-worker:jes:cf-content-5
-                    redisKey = OtherUtils.genRedisKey(dataSyncConfigDto.getTo().getCluster(), dataSyncConfigDto.getTo().getIdx());
+                    redisKey = OtherUtils.genRedisKey(condition.getSourceIndex());
                     field = DateUtils.dateFormat(date, DateUtils.DATE_PATTERN);
-                } else if (dataSyncConfigDto.getDateRangeDto().getSplitType().getCode().equals(SplitDateType.BY_HOUR.getCode())) {
+                } else if (condition.getSplitCondition().getSplitType().getCode().equals(SplitDateType.BY_HOUR.getCode())) {
                     //按小时分割
                     //key cf-sync-worker:jes:cf-content-5:hour
-                    redisKey = OtherUtils.genRedisKey(dataSyncConfigDto.getTo().getCluster(), dataSyncConfigDto.getTo().getIdx()) + ":hour";
+                    redisKey = OtherUtils.genRedisKey(condition.getSourceIndex()) + ":hour";
                     field = DateUtils.dateFormat(date, DateUtils.DATE_HOUR_PATTERN);
                 }
 
@@ -89,11 +90,11 @@ public class Es2EsWorker implements Callable<Result<Long>> {
     }
 
 
-    private SearchRequest buildSearchRequest(EsDataSyncConfigDto esDataSyncConfigDto) {
-        if (esDataSyncConfigDto.getDateRangeDto() != null && esDataSyncConfigDto.getDateRangeDto().getDateField() != null) {
-            String dateField = esDataSyncConfigDto.getDateRangeDto().getDateField();
-            String startDateStr = esDataSyncConfigDto.getDateRangeDto().getStart();
-            String endDateStr = esDataSyncConfigDto.getDateRangeDto().getEnd();
+    private SearchRequest buildSearchRequest(DataMigrateCondition condition) {
+        if ( condition.getSplitCondition().getDateField() != null) {
+            String dateField = condition.getSplitCondition().getDateField();
+            String startDateStr = condition.getSplitCondition().getStart();
+            String endDateStr = condition.getSplitCondition().getEnd();
 
             Date startDate = null;
             Date endDate = null;
@@ -101,7 +102,7 @@ public class Es2EsWorker implements Callable<Result<Long>> {
                 try {
                     startDate = DateUtils.dateParse(startDateStr, DateUtils.DATE_TIME_PATTERN);
                 } catch (ParseException e) {
-                    log.error("Es2EsWorker doDataSync startDateStr parse error:", e);
+                    log.error("IndexMigrateWorker doDataSync startDateStr parse error:", e);
                 }
 
             }
@@ -109,12 +110,12 @@ public class Es2EsWorker implements Callable<Result<Long>> {
                 try {
                     endDate = DateUtils.dateParse(endDateStr, DateUtils.DATE_TIME_PATTERN);
                 } catch (ParseException e) {
-                    log.error("Es2EsWorker doDataSync endDateStr parse error:", e);
+                    log.error("IndexMigrateWorker doDataSync endDateStr parse error:", e);
                 }
             }
 
             if (endDate == null || startDate == null) {
-                log.error("Es2EsWorker doDataSync endDate or startDate error DateRangeDto:{}", JSON.toJSONString(esDataSyncConfigDto.getDateRangeDto()));
+                log.error("IndexMigrateWorker doDataSync endDate or startDate error condition:{}", JSON.toJSONString(condition));
                 return null;
             }
             BoolQueryBuilder boolQueryBuilder = boolQuery();
@@ -125,7 +126,7 @@ public class Es2EsWorker implements Callable<Result<Long>> {
             if (endDate != null) {
                 boolQueryBuilder.filter(rangeQuery(dateField).lte(endDateStr));//小于等于结束时间
             }
-            SearchRequest searchRequest = new SearchRequest(esDataSyncConfigDto.getFrom().getIdx());
+            SearchRequest searchRequest = new SearchRequest(condition.getSourceIndex());
             SearchSourceBuilder sourceBuilder = new SearchSourceBuilder();
             //sourceBuilder.size(100);
             sourceBuilder.query(boolQueryBuilder);
@@ -135,18 +136,18 @@ public class Es2EsWorker implements Callable<Result<Long>> {
         return null;
     }
 
-    private Result<Long> doDataSync(EsDataSyncConfigDto esDataSyncConfigDto) {
-        log.info("Es2EsWorker doDataSync esDataSyncConfigDto:{}", JSON.toJSONString(esDataSyncConfigDto));
+    private Result<Long> doDataSync(DataMigrateCondition condition) {
+        log.info("IndexMigrateWorker doDataSync condition:{}", JSON.toJSONString(condition));
 
-        String readIdx = esDataSyncConfigDto.getFrom().getIdx();
-        String writeIdx = esDataSyncConfigDto.getTo().getIdx();
-        String writeIdKey = esDataSyncConfigDto.getTo().getIdKey();
+        String readIdx = condition.getSourceIndex();
+        String writeIdx = condition.getDestinationIndex();
+        String writeIdKey = condition.getIdKey();
 
         long totalCount = esOpsService.getIndexDocCount(readIdx);
         long syncCount = 0L;
         //todo 重写searchrequest
         //构造查询条件
-        SearchRequest searchRequest = buildSearchRequest(esDataSyncConfigDto);
+        SearchRequest searchRequest = buildSearchRequest(condition);
         if (searchRequest == null) {
             return Result.genResult(ResultCodeEnum.PARAM_ERROR.getCode(), "buildSearchRequest error", null);
         }
@@ -161,7 +162,7 @@ public class Es2EsWorker implements Callable<Result<Long>> {
                 }
             }
         }
-        log.info("Es2EsWorker doDataSync index:{},syncCount:{},start:{},end:{}", readIdx, JSON.toJSONString(syncCount), dataSyncConfigDto.getDateRangeDto().getStart(), dataSyncConfigDto.getDateRangeDto().getEnd());
-        return Result.genResult(ResultCodeEnum.SUCCESS.getCode(), "index:" + readIdx + "syncCount:" + syncCount + ";[ " + dataSyncConfigDto.getDateRangeDto().getStart() + " - " + dataSyncConfigDto.getDateRangeDto().getEnd() + "]", syncCount);
+        log.info("IndexMigrateWorker doDataSync index:{},syncCount:{},start:{},end:{}", readIdx, JSON.toJSONString(syncCount), condition.getSplitCondition().getStart(), condition.getSplitCondition().getEnd());
+        return Result.genResult(ResultCodeEnum.SUCCESS.getCode(), "index:" + readIdx + "syncCount:" + syncCount + ";[ " + condition.getSplitCondition().getStart() + " - " + condition.getSplitCondition().getEnd() + "]", syncCount);
     }
 }
