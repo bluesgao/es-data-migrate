@@ -1,10 +1,12 @@
-package com.bluesgao.edm.service;
+package com.bluesgao.edm.worker;
 
 import com.alibaba.fastjson.JSON;
 import com.bluesgao.edm.common.Result;
 import com.bluesgao.edm.common.ResultCodeEnum;
 import com.bluesgao.edm.conf.EsDataSyncConfigDto;
 import com.bluesgao.edm.conf.SplitDateType;
+import com.bluesgao.edm.service.CacheOpsService;
+import com.bluesgao.edm.service.EsOpsService;
 import com.bluesgao.edm.util.DateUtils;
 import com.bluesgao.edm.util.OtherUtils;
 import lombok.extern.slf4j.Slf4j;
@@ -23,7 +25,7 @@ import static org.elasticsearch.index.query.QueryBuilders.boolQuery;
 import static org.elasticsearch.index.query.QueryBuilders.rangeQuery;
 
 @Slf4j
-public class Es2EsJob implements Callable<Result<Long>> {
+public class Es2EsWorker implements Callable<Result<Long>> {
 
     private EsOpsService esOpsService;
 
@@ -31,7 +33,7 @@ public class Es2EsJob implements Callable<Result<Long>> {
 
     private EsDataSyncConfigDto dataSyncConfigDto;
 
-    public Es2EsJob(EsOpsService esOpsService, CacheOpsService cacheOpsService, EsDataSyncConfigDto dataSyncConfigDto) {
+    public Es2EsWorker(EsOpsService esOpsService, CacheOpsService cacheOpsService, EsDataSyncConfigDto dataSyncConfigDto) {
         this.esOpsService = esOpsService;
         this.cacheOpsService = cacheOpsService;
         this.dataSyncConfigDto = dataSyncConfigDto;
@@ -99,7 +101,7 @@ public class Es2EsJob implements Callable<Result<Long>> {
                 try {
                     startDate = DateUtils.dateParse(startDateStr, DateUtils.DATE_TIME_PATTERN);
                 } catch (ParseException e) {
-                    log.error("Es2EsJob doDataSync startDateStr parse error:", e);
+                    log.error("Es2EsWorker doDataSync startDateStr parse error:", e);
                 }
 
             }
@@ -107,12 +109,12 @@ public class Es2EsJob implements Callable<Result<Long>> {
                 try {
                     endDate = DateUtils.dateParse(endDateStr, DateUtils.DATE_TIME_PATTERN);
                 } catch (ParseException e) {
-                    log.error("Es2EsJob doDataSync endDateStr parse error:", e);
+                    log.error("Es2EsWorker doDataSync endDateStr parse error:", e);
                 }
             }
 
             if (endDate == null || startDate == null) {
-                log.error("Es2EsJob doDataSync endDate or startDate error DateRangeDto:{}", JSON.toJSONString(esDataSyncConfigDto.getDateRangeDto()));
+                log.error("Es2EsWorker doDataSync endDate or startDate error DateRangeDto:{}", JSON.toJSONString(esDataSyncConfigDto.getDateRangeDto()));
                 return null;
             }
             BoolQueryBuilder boolQueryBuilder = boolQuery();
@@ -134,7 +136,7 @@ public class Es2EsJob implements Callable<Result<Long>> {
     }
 
     private Result<Long> doDataSync(EsDataSyncConfigDto esDataSyncConfigDto) {
-        log.info("Es2EsJob doDataSync esDataSyncConfigDto:{}", JSON.toJSONString(esDataSyncConfigDto));
+        log.info("Es2EsWorker doDataSync esDataSyncConfigDto:{}", JSON.toJSONString(esDataSyncConfigDto));
 
         String readIdx = esDataSyncConfigDto.getFrom().getIdx();
         String writeIdx = esDataSyncConfigDto.getTo().getIdx();
@@ -159,7 +161,7 @@ public class Es2EsJob implements Callable<Result<Long>> {
                 }
             }
         }
-        log.info("Es2EsJob doDataSync index:{},syncCount:{},start:{},end:{}", readIdx, JSON.toJSONString(syncCount), dataSyncConfigDto.getDateRangeDto().getStart(), dataSyncConfigDto.getDateRangeDto().getEnd());
+        log.info("Es2EsWorker doDataSync index:{},syncCount:{},start:{},end:{}", readIdx, JSON.toJSONString(syncCount), dataSyncConfigDto.getDateRangeDto().getStart(), dataSyncConfigDto.getDateRangeDto().getEnd());
         return Result.genResult(ResultCodeEnum.SUCCESS.getCode(), "index:" + readIdx + "syncCount:" + syncCount + ";[ " + dataSyncConfigDto.getDateRangeDto().getStart() + " - " + dataSyncConfigDto.getDateRangeDto().getEnd() + "]", syncCount);
     }
 }

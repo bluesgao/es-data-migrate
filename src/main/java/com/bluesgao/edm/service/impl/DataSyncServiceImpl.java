@@ -9,6 +9,7 @@ import com.bluesgao.edm.conf.SplitDateType;
 import com.bluesgao.edm.service.*;
 import com.bluesgao.edm.util.DateUtils;
 import com.bluesgao.edm.util.OtherUtils;
+import com.bluesgao.edm.worker.Es2EsWorker;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -98,8 +99,8 @@ public class DataSyncServiceImpl implements DataSyncService {
                 BeanUtils.copyProperties(dataSyncConfigDto, tempConfig);
                 tempConfig.setDateRangeDto(splitDateMap.get(key));
                 log.info("有效任务key:{},tempConfig:{}", key, JSON.toJSONString(tempConfig));
-                Es2EsJob es2EsJob = new Es2EsJob(esOpsService, cacheOpsService, tempConfig);
-                completionService.submit(es2EsJob);
+                Es2EsWorker es2EsWorker = new Es2EsWorker(esOpsService, cacheOpsService, tempConfig);
+                completionService.submit(es2EsWorker);
                 taskCount++;
             }
 
