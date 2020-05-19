@@ -15,6 +15,7 @@ import org.elasticsearch.index.query.BoolQueryBuilder;
 import org.elasticsearch.index.query.QueryBuilder;
 import org.elasticsearch.search.builder.SearchSourceBuilder;
 
+import java.text.ParseException;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
@@ -47,42 +48,45 @@ public class IndexMigrateWorker implements Callable<Result<Long>> {
             log.info("call doMigrate end condition:{},syncCount:{}", JSON.toJSONString(condition), syncCount);
             if (syncCount > 0) {
                 //记录这天已经同步完成
-
-                String redisKey = null;
-                String field = null;
-                Date date = DateUtils.dateParse(condition.getSplitCondition().getEnd(), DateUtils.DATE_TIME_PATTERN);
-                //按日期分割
-                if (condition.getSplitCondition().getSplitType().getCode().equals(SplitDateType.BY_DATE.getCode())) {
-                    //key cf-sync-worker:jes:cf-content-5
-                    redisKey = OtherUtils.genRedisKey(condition.getSourceIndex());
-                    field = DateUtils.dateFormat(date, DateUtils.DATE_PATTERN);
-                } else if (condition.getSplitCondition().getSplitType().getCode().equals(SplitDateType.BY_HOUR.getCode())) {
-                    //按小时分割
-                    //key cf-sync-worker:jes:cf-content-5:hour
-                    redisKey = OtherUtils.genRedisKey(condition.getSourceIndex()) + ":hour";
-                    field = DateUtils.dateFormat(date, DateUtils.DATE_HOUR_PATTERN);
-                }
-
-                if (redisKey != null && field != null) {
-                    //key cf-sync-worker:jes:cf-content-5
-                    //String redisKey = OtherUtils.genRedisKey(dataSyncConfigDto.getTo().getCluster(), dataSyncConfigDto.getTo().getIdx());
-                    log.info("call doMigrate redisKey:{},syncCount:{}", redisKey, syncCount);
-                    try {
-                        log.info("call doMigrate redisKey:{},field:{},syncCount:{}", redisKey, field, syncCount);
-                        boolean ret = cacheOpsService.hsetValue(redisKey, field, syncCount);
-                        log.info("call doMigrate redisKey:{},field:{},syncCount:{},ret:{}", redisKey, field, syncCount, ret);
-                    } catch (Exception e) {
-                        log.error("call doMigrate redisKey:{},field:{},syncCount:{} error:{}", redisKey, field, syncCount, e);
-                    }
-                } else {
-                    log.error("call doMigrate redis key is null");
-                }
+                record(syncCount);
             }
         } catch (Exception e) {
             //e.printStackTrace();
             log.error("call doMigrate error:{}", e);
         }
         return Result.genResult(ResultCodeEnum.SUCCESS.getCode(), "", syncCount);
+    }
+
+    private void record(Long syncCount) throws ParseException {
+        String redisKey = null;
+        String field = null;
+        Date date = DateUtils.dateParse(condition.getSplitCondition().getEnd(), DateUtils.DATE_TIME_PATTERN);
+        //按日期分割
+        if (condition.getSplitCondition().getSplitType().getCode().equals(SplitDateType.BY_DATE.getCode())) {
+            //key cf-sync-worker:jes:cf-content-5
+            redisKey = OtherUtils.genRedisKey(condition.getSourceIndex());
+            field = DateUtils.dateFormat(date, DateUtils.DATE_PATTERN);
+        } else if (condition.getSplitCondition().getSplitType().getCode().equals(SplitDateType.BY_HOUR.getCode())) {
+            //按小时分割
+            //key cf-sync-worker:jes:cf-content-5:hour
+            redisKey = OtherUtils.genRedisKey(condition.getSourceIndex()) + ":hour";
+            field = DateUtils.dateFormat(date, DateUtils.DATE_HOUR_PATTERN);
+        }
+
+        if (redisKey != null && field != null) {
+            //key cf-sync-worker:jes:cf-content-5
+            //String redisKey = OtherUtils.genRedisKey(dataSyncConfigDto.getTo().getCluster(), dataSyncConfigDto.getTo().getIdx());
+            log.info("call doMigrate redisKey:{},syncCount:{}", redisKey, syncCount);
+            try {
+                log.info("call doMigrate redisKey:{},field:{},syncCount:{}", redisKey, field, syncCount);
+                boolean ret = cacheOpsService.hsetValue(redisKey, field, syncCount);
+                log.info("call doMigrate redisKey:{},field:{},syncCount:{},ret:{}", redisKey, field, syncCount, ret);
+            } catch (Exception e) {
+                log.error("call doMigrate redisKey:{},field:{},syncCount:{} error:{}", redisKey, field, syncCount, e);
+            }
+        } else {
+            log.error("call doMigrate redis key is null");
+        }
     }
 
 
