@@ -42,9 +42,9 @@ public class IndexMigrateWorker implements Callable<Result<Long>> {
     public Result<Long> call() {
         Result<Long> syncResult = null;
         try {
-            log.info("call doDataSync start condition:{}", JSON.toJSONString(condition));
-            syncResult = doDataSync(condition);
-            log.info("call doDataSync end condition:{},syncResult:{}", JSON.toJSONString(condition), JSON.toJSONString(syncResult));
+            log.info("call doMigrate start condition:{}", JSON.toJSONString(condition));
+            syncResult = doMigrate(condition);
+            log.info("call doMigrate end condition:{},syncResult:{}", JSON.toJSONString(condition), JSON.toJSONString(syncResult));
             if (syncResult != null && syncResult.getData() != null && syncResult.getData() > 0) {
                 //记录这天已经同步完成
 
@@ -68,21 +68,21 @@ public class IndexMigrateWorker implements Callable<Result<Long>> {
                     //String redisKey = OtherUtils.genRedisKey(dataSyncConfigDto.getTo().getCluster(), dataSyncConfigDto.getTo().getIdx());
 
                     Long syncCount = syncResult.getData();
-                    log.info("call doDataSync redisKey:{},syncCount:{}", redisKey, syncCount);
+                    log.info("call doMigrate redisKey:{},syncCount:{}", redisKey, syncCount);
                     try {
-                        log.info("call doDataSync redisKey:{},field:{},syncCount:{}", redisKey, field, syncCount);
+                        log.info("call doMigrate redisKey:{},field:{},syncCount:{}", redisKey, field, syncCount);
                         boolean ret = cacheOpsService.hsetValue(redisKey, field, syncCount);
-                        log.info("call doDataSync redisKey:{},field:{},syncCount:{},ret:{}", redisKey, field, syncCount, ret);
+                        log.info("call doMigrate redisKey:{},field:{},syncCount:{},ret:{}", redisKey, field, syncCount, ret);
                     } catch (Exception e) {
-                        log.error("call doDataSync redisKey:{},field:{},syncCount:{} error:{}", redisKey, field, syncCount, e);
+                        log.error("call doMigrate redisKey:{},field:{},syncCount:{} error:{}", redisKey, field, syncCount, e);
                     }
                 } else {
-                    log.error("call doDataSync redis key is null");
+                    log.error("call doMigrate redis key is null");
                 }
             }
         } catch (Exception e) {
             //e.printStackTrace();
-            log.error("call doDataSync error:{}", e);
+            log.error("call doMigrate error:{}", e);
         }
         return syncResult;
     }
@@ -100,7 +100,7 @@ public class IndexMigrateWorker implements Callable<Result<Long>> {
                 try {
                     startDate = DateUtils.dateParse(startDateStr, DateUtils.DATE_TIME_PATTERN);
                 } catch (ParseException e) {
-                    log.error("IndexMigrateWorker doDataSync startDateStr parse error:", e);
+                    log.error("IndexMigrateWorker doMigrate startDateStr parse error:", e);
                 }
 
             }
@@ -108,12 +108,12 @@ public class IndexMigrateWorker implements Callable<Result<Long>> {
                 try {
                     endDate = DateUtils.dateParse(endDateStr, DateUtils.DATE_TIME_PATTERN);
                 } catch (ParseException e) {
-                    log.error("IndexMigrateWorker doDataSync endDateStr parse error:", e);
+                    log.error("IndexMigrateWorker doMigrate endDateStr parse error:", e);
                 }
             }
 
             if (endDate == null || startDate == null) {
-                log.error("IndexMigrateWorker doDataSync endDate or startDate error condition:{}", JSON.toJSONString(condition));
+                log.error("IndexMigrateWorker doMigrate endDate or startDate error condition:{}", JSON.toJSONString(condition));
                 return null;
             }
             BoolQueryBuilder boolQueryBuilder = boolQuery();
@@ -134,13 +134,14 @@ public class IndexMigrateWorker implements Callable<Result<Long>> {
         return null;
     }
 
-    private Result<Long> doDataSync(DataMigrateCondition condition) {
-        log.info("IndexMigrateWorker doDataSync condition:{}", JSON.toJSONString(condition));
+    private Result<Long> doMigrate(DataMigrateCondition condition) {
+        log.info("IndexMigrateWorker doMigrate condition:{}", JSON.toJSONString(condition));
 
         String readIdx = condition.getSourceIndex();
         String writeIdx = condition.getDestinationIndex();
         String writeIdKey = condition.getIdKey();
 
+        //todo 带条件查询
         long totalCount = esOpsService.getIndexDocCount(readIdx);
         long syncCount = 0L;
         //todo 重写searchrequest
@@ -160,7 +161,7 @@ public class IndexMigrateWorker implements Callable<Result<Long>> {
                 }
             }
         }
-        log.info("IndexMigrateWorker doDataSync index:{},syncCount:{},start:{},end:{}", readIdx, JSON.toJSONString(syncCount), condition.getSplitCondition().getStart(), condition.getSplitCondition().getEnd());
+        log.info("IndexMigrateWorker doMigrate index:{},syncCount:{},start:{},end:{}", readIdx, JSON.toJSONString(syncCount), condition.getSplitCondition().getStart(), condition.getSplitCondition().getEnd());
         return Result.genResult(ResultCodeEnum.SUCCESS.getCode(), "index:" + readIdx + "syncCount:" + syncCount + ";[ " + condition.getSplitCondition().getStart() + " - " + condition.getSplitCondition().getEnd() + "]", syncCount);
     }
 }
