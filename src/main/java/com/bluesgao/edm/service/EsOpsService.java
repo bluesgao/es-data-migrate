@@ -1,7 +1,7 @@
 package com.bluesgao.edm.service;
 
 
-import org.elasticsearch.action.search.SearchRequest;
+import com.bluesgao.edm.condition.DataMigrateCondition;
 import org.elasticsearch.index.query.QueryBuilder;
 
 import java.util.List;
@@ -12,7 +12,7 @@ public interface EsOpsService {
 
     boolean indexIsExist(String indexName);
 
-    public long getIndexDocCount(String indexName, QueryBuilder queryBuilder);
+    long getIndexDocCount(String indexName, QueryBuilder queryBuilder);
 
-    List<Map<String, Object>> scroll(SearchRequest searchRequest);
+    long migrate(DataMigrateCondition condition);
 }

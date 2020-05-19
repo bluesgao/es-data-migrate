@@ -29,7 +29,7 @@ class DataMigrateServiceTest {
         SplitCondition splitCondition = new SplitCondition();
         splitCondition.setDateField("orderTime");
         splitCondition.setStart("2020-01-01 00:00:00");
-        splitCondition.setEnd("2020-01-01 23:59:59");
+        splitCondition.setEnd("2020-01-03 23:59:59");
         splitCondition.setSplitType(SplitDateType.BY_DATE);
 
         condition.setSplitCondition(splitCondition);

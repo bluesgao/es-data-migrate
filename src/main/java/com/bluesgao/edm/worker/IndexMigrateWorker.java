@@ -40,12 +40,12 @@ public class IndexMigrateWorker implements Callable<Result<Long>> {
 
     @Override
     public Result<Long> call() {
-        Result<Long> syncResult = null;
+        Long syncCount = 0L;
         try {
             log.info("call doMigrate start condition:{}", JSON.toJSONString(condition));
-            syncResult = doMigrate(condition);
-            log.info("call doMigrate end condition:{},syncResult:{}", JSON.toJSONString(condition), JSON.toJSONString(syncResult));
-            if (syncResult != null && syncResult.getData() != null && syncResult.getData() > 0) {
+            syncCount = esOpsService.migrate(condition);
+            log.info("call doMigrate end condition:{},syncCount:{}", JSON.toJSONString(condition), syncCount);
+            if (syncCount > 0) {
                 //记录这天已经同步完成
 
                 String redisKey = null;
@@ -66,8 +66,6 @@ public class IndexMigrateWorker implements Callable<Result<Long>> {
                 if (redisKey != null && field != null) {
                     //key cf-sync-worker:jes:cf-content-5
                     //String redisKey = OtherUtils.genRedisKey(dataSyncConfigDto.getTo().getCluster(), dataSyncConfigDto.getTo().getIdx());
-
-                    Long syncCount = syncResult.getData();
                     log.info("call doMigrate redisKey:{},syncCount:{}", redisKey, syncCount);
                     try {
                         log.info("call doMigrate redisKey:{},field:{},syncCount:{}", redisKey, field, syncCount);
@@ -84,60 +82,8 @@ public class IndexMigrateWorker implements Callable<Result<Long>> {
             //e.printStackTrace();
             log.error("call doMigrate error:{}", e);
         }
-        return syncResult;
+        return Result.genResult(ResultCodeEnum.SUCCESS.getCode(), "", syncCount);
     }
 
-    private QueryBuilder genQueryBuilder(DataMigrateCondition condition) {
-        String dateField = condition.getSplitCondition().getDateField();
-        String startDateStr = condition.getSplitCondition().getStart();
-        String endDateStr = condition.getSplitCondition().getEnd();
-        BoolQueryBuilder boolQueryBuilder = boolQuery();
-        boolQueryBuilder.filter(rangeQuery(dateField).gte(startDateStr).lte(endDateStr));
-        return boolQueryBuilder;
-    }
 
-    private SearchRequest genSearchRequest(DataMigrateCondition condition, QueryBuilder queryBuilder) {
-        SearchRequest searchRequest = new SearchRequest(condition.getSourceIndex());
-        SearchSourceBuilder sourceBuilder = new SearchSourceBuilder();
-        sourceBuilder.size(100);
-        sourceBuilder.query(queryBuilder);
-        log.info(sourceBuilder.toString());
-        searchRequest.source(sourceBuilder);
-        return searchRequest;
-    }
-
-    private Result<Long> doMigrate(DataMigrateCondition condition) {
-        log.info("IndexMigrateWorker doMigrate condition:{}", JSON.toJSONString(condition));
-
-        String readIdx = condition.getSourceIndex();
-        String writeIdx = condition.getDestinationIndex();
-        String writeIdKey = condition.getIdKey();
-
-        //构造查询条件
-        QueryBuilder queryBuilder = genQueryBuilder(condition);
-
-        //todo 带条件查询
-        long totalCount = esOpsService.getIndexDocCount(readIdx, queryBuilder);
-        log.info("IndexMigrateWorker doMigrate totalCount:{}", totalCount);
-        long syncCount = 0L;
-        //todo 重写searchrequest
-        SearchRequest searchRequest = genSearchRequest(condition, queryBuilder);
-        if (searchRequest == null) {
-            return Result.genResult(ResultCodeEnum.PARAM_ERROR.getCode(), "genSearchRequest error", null);
-        }
-        while (syncCount < totalCount) {
-            //读数据
-            List<Map<String, Object>> res = esOpsService.scroll(searchRequest);
-            log.info("IndexMigrateWorker doMigrate scroll:{}", JSON.toJSONString(res));
-            if (res != null && res.size() > 0) {
-                //写数据
-                int temp = esOpsService.bulkSave(writeIdx, writeIdKey, res);
-                if (temp > 0) {
-                    syncCount = syncCount + temp;
-                }
-            }
-        }
-        log.info("IndexMigrateWorker doMigrate index:{},syncCount:{},start:{},end:{}", readIdx, JSON.toJSONString(syncCount), condition.getSplitCondition().getStart(), condition.getSplitCondition().getEnd());
-        return Result.genResult(ResultCodeEnum.SUCCESS.getCode(), "index:" + readIdx + "syncCount:" + syncCount + ";[ " + condition.getSplitCondition().getStart() + " - " + condition.getSplitCondition().getEnd() + "]", syncCount);
-    }
 }
