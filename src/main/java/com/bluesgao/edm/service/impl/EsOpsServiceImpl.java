@@ -3,7 +3,7 @@ package com.bluesgao.edm.service.impl;
 import com.alibaba.fastjson.JSON;
 import com.bluesgao.edm.service.EsOpsService;
 import lombok.extern.slf4j.Slf4j;
-import org.elasticsearch.action.admin.indices.get.GetIndexRequest;
+import org.elasticsearch.client.indices.GetIndexRequest;
 import org.elasticsearch.action.bulk.BulkRequest;
 import org.elasticsearch.action.bulk.BulkResponse;
 import org.elasticsearch.action.index.IndexRequest;
@@ -15,9 +15,9 @@ import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.RestHighLevelClient;
 import org.elasticsearch.client.core.CountRequest;
 import org.elasticsearch.client.core.CountResponse;
-import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.common.xcontent.XContentType;
+import org.elasticsearch.index.query.QueryBuilder;
 import org.elasticsearch.search.Scroll;
 import org.elasticsearch.search.SearchHit;
 import org.springframework.stereotype.Service;
@@ -41,11 +41,15 @@ public class EsOpsServiceImpl implements EsOpsService {
     private int writeThreshold = 200;
 
     @Override
-    public long getIndexDocCount(String indexName) {
+    public long getIndexDocCount(String indexName, QueryBuilder queryBuilder) {
         try {
             String[] idxs = {indexName};
             CountRequest request = new CountRequest(idxs);
+            if (queryBuilder != null) {
+                request.query(queryBuilder);
+            }
             CountResponse response = restHighLevelClient.count(request, RequestOptions.DEFAULT);
+            log.info("getIndexDocCount response:{}", JSON.toJSONString(response));
             return response.getCount();
         } catch (Exception e) {
             log.error("indexIsExist error:{}", e);
@@ -92,14 +96,16 @@ public class EsOpsServiceImpl implements EsOpsService {
 
     @Override
     public boolean indexIsExist(String indexName) {
+        log.info("indexIsExist indexName:{}", indexName);
+        boolean exists = false;
         try {
-            GetIndexRequest request = new GetIndexRequest(StreamInput.wrap(indexName.getBytes()));
-            boolean exists = restHighLevelClient.indices().exists(request, RequestOptions.DEFAULT);
-            return exists;
-        } catch (Exception e) {
-            log.error("indexIsExist error:{}", e);
+            GetIndexRequest getIndexRequest = new GetIndexRequest(indexName);
+            getIndexRequest.humanReadable(true);
+            exists = restHighLevelClient.indices().exists(getIndexRequest, RequestOptions.DEFAULT);
+        } catch (IOException e) {
+            e.printStackTrace();
         }
-        return false;
+        return exists;
     }
 
     @Override
@@ -109,7 +115,7 @@ public class EsOpsServiceImpl implements EsOpsService {
             BulkRequest bulkRequest = new BulkRequest();
             for (Map<String, Object> bulk : bulks) {
                 IndexRequest request = new IndexRequest("post");
-                request.index(indexName).id(String.valueOf(bulk.get(idKey))).source(bulk.toString(), XContentType.JSON);
+                request.index(indexName).id(String.valueOf(bulk.get(idKey))).source(JSON.toJSONString(bulk), XContentType.JSON);
                 bulkRequest.add(request);
             }
             BulkResponse response = restHighLevelClient.bulk(bulkRequest, RequestOptions.DEFAULT);

@@ -2,6 +2,7 @@ package com.bluesgao.edm.service;
 
 
 import org.elasticsearch.action.search.SearchRequest;
+import org.elasticsearch.index.query.QueryBuilder;
 
 import java.util.List;
 import java.util.Map;
@@ -11,7 +12,7 @@ public interface EsOpsService {
 
     boolean indexIsExist(String indexName);
 
-    public long getIndexDocCount(String indexName);
+    public long getIndexDocCount(String indexName, QueryBuilder queryBuilder);
 
     List<Map<String, Object>> scroll(SearchRequest searchRequest);
 }

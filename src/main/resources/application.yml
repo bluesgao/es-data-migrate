@@ -1,0 +1,24 @@
+spring:
+  redis:
+    port: 6379
+    host: 47.97.205.190
+    password: gx123456
+#    jedis:
+#      pool:
+#        max-active: 8
+
+elasticsearch:
+  ip: 47.97.205.190
+  port: 9200
+  user: elastic
+  password: gx123456
+  cluster:
+    name: test
+  pool: 8
+
+server:
+  port: 8080
+  tomcat:
+    uri-encoding: utf-8
+
+debug: false

@@ -12,6 +12,7 @@ import com.bluesgao.edm.util.DateUtils;
 import com.bluesgao.edm.util.OtherUtils;
 import com.bluesgao.edm.worker.IndexMigrateWorker;
 import lombok.extern.slf4j.Slf4j;
+import org.elasticsearch.common.recycler.Recycler;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
@@ -32,16 +33,18 @@ public class DataMigrateServiceImpl implements DataMigrateService {
 
     @Autowired
     private CacheOpsService cacheOpsService;
+
+    @Override
     public Result indexMigrate(DataMigrateCondition condition) {
+        log.info("indexMigrate condition:", JSON.toJSONString(condition));
         //条件检查
-        if (!doCheck(condition)){
-            log.error("indexMigrate doCheck error:{}", JSON.toJSONString(condition));
+        if (!doCheck(condition)) {
             return null;
         }
 
         //条件拆分
         Map<String, SplitCondition> splitConditionMap = doSplit(condition.getSplitCondition());
-        if (splitConditionMap==null || splitConditionMap.size()==0){
+        if (splitConditionMap == null || splitConditionMap.size() == 0) {
             log.error("indexMigrate splitDateMap error:{}", JSON.toJSONString(condition));
             return null;
         }
@@ -56,9 +59,10 @@ public class DataMigrateServiceImpl implements DataMigrateService {
         for (String key : splitConditionMap.keySet()) {
             String redisKey = OtherUtils.genRedisKey(condition.getSourceIndex()) + ":hour";
             //去除已经同步过的日期
-            String ret = cacheOpsService.hgetValue(redisKey, key).toString();
+            Object ret = cacheOpsService.hgetValue(redisKey, key);
+
             log.debug("redis hget redisKey:{},field:{},ret:{}", redisKey, key, ret);
-            if (ret != null && Integer.valueOf(ret) > 0) {
+            if (ret != null && Integer.valueOf(ret.toString()) > 0) {
                 log.info("当前日期{}已经同步,跳过 redis hget redisKey:{},field:{},ret:{}", key, redisKey, key, ret);
                 continue;
             }
@@ -96,18 +100,18 @@ public class DataMigrateServiceImpl implements DataMigrateService {
         return null;
     }
 
-    private boolean doCheck(DataMigrateCondition condition){
-        if (condition==null
-                || condition.getSourceIndex()==null
-                || condition.getSourceIndex().length()==0
-                || condition.getDestinationIndex()==null
-                || condition.getDestinationIndex().length()==0
-                || condition.getSplitCondition().getDateField()==null
-                || condition.getSplitCondition().getDateField().length()==0
-                || condition.getSplitCondition().getStart()==null
-                ||condition.getSplitCondition().getStart().length()==0
-                || condition.getSplitCondition().getEnd()==null
-                || condition.getSplitCondition().getEnd().length()==0){
+    private boolean doCheck(DataMigrateCondition condition) {
+        if (condition == null
+                || condition.getSourceIndex() == null
+                || condition.getSourceIndex().length() == 0
+                || condition.getDestinationIndex() == null
+                || condition.getDestinationIndex().length() == 0
+                || condition.getSplitCondition().getDateField() == null
+                || condition.getSplitCondition().getDateField().length() == 0
+                || condition.getSplitCondition().getStart() == null
+                || condition.getSplitCondition().getStart().length() == 0
+                || condition.getSplitCondition().getEnd() == null
+                || condition.getSplitCondition().getEnd().length() == 0) {
             log.error("indexMigrate doCheck error:{}", JSON.toJSONString(condition));
             return false;
         }
@@ -120,22 +124,22 @@ public class DataMigrateServiceImpl implements DataMigrateService {
         } catch (ParseException e) {
             e.printStackTrace();
         }
-        if (start==null || end==null){
+        if (start == null || end == null) {
             log.error("indexMigrate doCheck start or end is error:{}", JSON.toJSONString(condition));
             return false;
         }
 
-        if (!esOpsService.indexIsExist(condition.getSourceIndex())){
+        if (!esOpsService.indexIsExist(condition.getSourceIndex())) {
             log.error("indexMigrate doCheck SourceIndex is not exist:{}", condition.getSourceIndex());
             return false;
         }
 
-        if (!esOpsService.indexIsExist(condition.getDestinationIndex())){
+        if (!esOpsService.indexIsExist(condition.getDestinationIndex())) {
             log.error("indexMigrate doCheck DestinationIndex is not exist:{}", condition.getDestinationIndex());
             return false;
         }
 
-        if (esOpsService.getIndexDocCount(condition.getSourceIndex())<=0){
+        if (esOpsService.getIndexDocCount(condition.getSourceIndex(), null) <= 0) {
             log.error("indexMigrate doCheck SourceIndex doc count is zero:{}", condition.getSourceIndex());
             return false;
         }
@@ -143,7 +147,7 @@ public class DataMigrateServiceImpl implements DataMigrateService {
         return true;
     }
 
-    private Map<String, SplitCondition> doSplit(SplitCondition condition){
+    private Map<String, SplitCondition> doSplit(SplitCondition condition) {
         Date start = null;
         Date end = null;
         try {

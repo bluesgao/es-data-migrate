@@ -12,10 +12,9 @@ import com.bluesgao.edm.util.OtherUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.elasticsearch.action.search.SearchRequest;
 import org.elasticsearch.index.query.BoolQueryBuilder;
+import org.elasticsearch.index.query.QueryBuilder;
 import org.elasticsearch.search.builder.SearchSourceBuilder;
-import org.springframework.util.StringUtils;
 
-import java.text.ParseException;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
@@ -30,6 +29,7 @@ public class IndexMigrateWorker implements Callable<Result<Long>> {
     private EsOpsService esOpsService;
 
     private CacheOpsService cacheOpsService;
+
     private DataMigrateCondition condition;
 
     public IndexMigrateWorker(EsOpsService esOpsService, CacheOpsService cacheOpsService, DataMigrateCondition condition) {
@@ -87,51 +87,23 @@ public class IndexMigrateWorker implements Callable<Result<Long>> {
         return syncResult;
     }
 
+    private QueryBuilder genQueryBuilder(DataMigrateCondition condition) {
+        String dateField = condition.getSplitCondition().getDateField();
+        String startDateStr = condition.getSplitCondition().getStart();
+        String endDateStr = condition.getSplitCondition().getEnd();
+        BoolQueryBuilder boolQueryBuilder = boolQuery();
+        boolQueryBuilder.filter(rangeQuery(dateField).gte(startDateStr).lte(endDateStr));
+        return boolQueryBuilder;
+    }
 
-    private SearchRequest buildSearchRequest(DataMigrateCondition condition) {
-        if ( condition.getSplitCondition().getDateField() != null) {
-            String dateField = condition.getSplitCondition().getDateField();
-            String startDateStr = condition.getSplitCondition().getStart();
-            String endDateStr = condition.getSplitCondition().getEnd();
-
-            Date startDate = null;
-            Date endDate = null;
-            if (!StringUtils.isEmpty(startDateStr)) {
-                try {
-                    startDate = DateUtils.dateParse(startDateStr, DateUtils.DATE_TIME_PATTERN);
-                } catch (ParseException e) {
-                    log.error("IndexMigrateWorker doMigrate startDateStr parse error:", e);
-                }
-
-            }
-            if (!StringUtils.isEmpty(endDateStr)) {
-                try {
-                    endDate = DateUtils.dateParse(endDateStr, DateUtils.DATE_TIME_PATTERN);
-                } catch (ParseException e) {
-                    log.error("IndexMigrateWorker doMigrate endDateStr parse error:", e);
-                }
-            }
-
-            if (endDate == null || startDate == null) {
-                log.error("IndexMigrateWorker doMigrate endDate or startDate error condition:{}", JSON.toJSONString(condition));
-                return null;
-            }
-            BoolQueryBuilder boolQueryBuilder = boolQuery();
-
-            if (startDate != null) {
-                boolQueryBuilder.filter(rangeQuery(dateField).gte(startDateStr));//大于等于开始时间
-            }
-            if (endDate != null) {
-                boolQueryBuilder.filter(rangeQuery(dateField).lte(endDateStr));//小于等于结束时间
-            }
-            SearchRequest searchRequest = new SearchRequest(condition.getSourceIndex());
-            SearchSourceBuilder sourceBuilder = new SearchSourceBuilder();
-            //sourceBuilder.size(100);
-            sourceBuilder.query(boolQueryBuilder);
-            log.info(sourceBuilder.toString());
-            searchRequest.source(sourceBuilder);
-        }
-        return null;
+    private SearchRequest genSearchRequest(DataMigrateCondition condition, QueryBuilder queryBuilder) {
+        SearchRequest searchRequest = new SearchRequest(condition.getSourceIndex());
+        SearchSourceBuilder sourceBuilder = new SearchSourceBuilder();
+        sourceBuilder.size(100);
+        sourceBuilder.query(queryBuilder);
+        log.info(sourceBuilder.toString());
+        searchRequest.source(sourceBuilder);
+        return searchRequest;
     }
 
     private Result<Long> doMigrate(DataMigrateCondition condition) {
@@ -141,18 +113,22 @@ public class IndexMigrateWorker implements Callable<Result<Long>> {
         String writeIdx = condition.getDestinationIndex();
         String writeIdKey = condition.getIdKey();
 
+        //构造查询条件
+        QueryBuilder queryBuilder = genQueryBuilder(condition);
+
         //todo 带条件查询
-        long totalCount = esOpsService.getIndexDocCount(readIdx);
+        long totalCount = esOpsService.getIndexDocCount(readIdx, queryBuilder);
+        log.info("IndexMigrateWorker doMigrate totalCount:{}", totalCount);
         long syncCount = 0L;
         //todo 重写searchrequest
-        //构造查询条件
-        SearchRequest searchRequest = buildSearchRequest(condition);
+        SearchRequest searchRequest = genSearchRequest(condition, queryBuilder);
         if (searchRequest == null) {
-            return Result.genResult(ResultCodeEnum.PARAM_ERROR.getCode(), "buildSearchRequest error", null);
+            return Result.genResult(ResultCodeEnum.PARAM_ERROR.getCode(), "genSearchRequest error", null);
         }
-        while (syncCount <= totalCount) {
+        while (syncCount < totalCount) {
             //读数据
             List<Map<String, Object>> res = esOpsService.scroll(searchRequest);
+            log.info("IndexMigrateWorker doMigrate scroll:{}", JSON.toJSONString(res));
             if (res != null && res.size() > 0) {
                 //写数据
                 int temp = esOpsService.bulkSave(writeIdx, writeIdKey, res);
